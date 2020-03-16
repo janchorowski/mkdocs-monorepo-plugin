@@ -18,7 +18,7 @@ from distutils.dir_util import copy_tree
 import logging
 import os
 
-from mkdocs.utils import warning_filter
+from mkdocs.utils import yaml_load, warning_filter
 
 log = logging.getLogger(__name__)
 log.addFilter(warning_filter)
@@ -29,22 +29,29 @@ log.addFilter(warning_filter)
 class Merger:
     def __init__(self, config):
         self.config = config
-        self.root_docs_dir = config['docs_dir']
+        self.root_docs_dir = config["docs_dir"]
         self.docs_dirs = list()
-        self.append('', self.root_docs_dir)
+        self.append("", self.root_docs_dir)
 
     def append(self, alias, docs_dir):
         self.docs_dirs.append([alias, docs_dir])
 
     def merge(self):
-        self.temp_docs_dir = TemporaryDirectory('', 'docs_')
+        self.temp_docs_dir = TemporaryDirectory("", "docs_")
 
-        aliases = list(filter(lambda docs_dir: len(docs_dir) > 0, map(
-            lambda docs_dir: docs_dir[0], self.docs_dirs)))
+        aliases = list(
+            filter(
+                lambda docs_dir: len(docs_dir) > 0,
+                map(lambda docs_dir: docs_dir[0], self.docs_dirs),
+            )
+        )
         if len(aliases) != len(set(aliases)):
             log.critical(
-                "[mkdocs-monorepo] You cannot have duplicated site names. " +
-                "Current registered site names in the monorepository: {}".format(', '.join(aliases)))
+                "[mkdocs-monorepo] You cannot have duplicated site names. "
+                + "Current registered site names in the monorepository: {}".format(
+                    ", ".join(aliases)
+                )
+            )
             raise SystemExit(1)
 
         for alias, docs_dir in self.docs_dirs:
@@ -52,15 +59,20 @@ class Merger:
                 source_dir = docs_dir
                 dest_dir = self.temp_docs_dir.name
             else:
-                source_dir = "{}/docs".format(docs_dir)
+                with open(os.path.join(docs_dir, "mkdocs.yml"), "rb") as f:
+                    navYaml = yaml_load(f)
+                sub_docs_dir = navYaml.get("docs_dir", "docs")
+
+                source_dir = "{}/{}".format(docs_dir, sub_docs_dir)
                 dest_dir = "{}/{}".format(self.temp_docs_dir.name, alias)
 
             if os.path.exists(source_dir):
                 copy_tree(source_dir, dest_dir)
             else:
                 log.critical(
-                    "[mkdocs-monorepo] The {} path is not valid. ".format(source_dir) +
-                    "Please update your 'nav' with a valid path.")
+                    "[mkdocs-monorepo] The {} path is not valid. ".format(source_dir)
+                    + "Please update your 'nav' with a valid path."
+                )
                 raise SystemExit(1)
 
         return str(self.temp_docs_dir.name)
