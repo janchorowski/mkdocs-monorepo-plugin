@@ -17,6 +17,8 @@ from distutils.dir_util import copy_tree
 
 import logging
 import os
+from os.path import join
+from pathlib import Path
 
 from mkdocs.utils import yaml_load, warning_filter
 
@@ -31,7 +33,8 @@ class Merger:
         self.config = config
         self.root_docs_dir = config["docs_dir"]
         self.docs_dirs = list()
-        self.append("", self.root_docs_dir)
+        self.append('', self.root_docs_dir)
+        self.files_source_dir = dict()
 
     def append(self, alias, docs_dir):
         self.docs_dirs.append([alias, docs_dir])
@@ -63,11 +66,19 @@ class Merger:
                     navYaml = yaml_load(f)
                 sub_docs_dir = navYaml.get("docs_dir", "docs")
 
-                source_dir = "{}/{}".format(docs_dir, sub_docs_dir)
-                dest_dir = "{}/{}".format(self.temp_docs_dir.name, alias)
+                source_dir = os.path.join(docs_dir, "docs")
+                split_alias = alias.split("/")
+                dest_dir = os.path.join(self.temp_docs_dir.name, *split_alias)
 
             if os.path.exists(source_dir):
                 copy_tree(source_dir, dest_dir)
+                for file_abs_path in Path(source_dir).rglob('*.md'):
+                    file_abs_path = str(file_abs_path) # python 3.5 compatibility
+                    if os.path.isfile(file_abs_path):
+                        file_rel_path = os.path.relpath(file_abs_path, source_dir)
+                        dest = join(dest_dir, file_rel_path)
+                        self.files_source_dir[dest] = file_abs_path
+
             else:
                 log.critical(
                     "[mkdocs-monorepo] The {} path is not valid. ".format(source_dir)
@@ -76,6 +87,9 @@ class Merger:
                 raise SystemExit(1)
 
         return str(self.temp_docs_dir.name)
+
+    def getFilesSourceFolder(self):
+        return self.files_source_dir
 
     def cleanup(self):
         return self.temp_docs_dir.cleanup()
